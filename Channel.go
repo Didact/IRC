@@ -1,4 +1,4 @@
-package github.com/Didact/irc
+package irc
 
 import (
 	"code.google.com/p/go-uuid/uuid"
