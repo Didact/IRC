@@ -11,43 +11,61 @@ type User struct {
 	Msgs     <-chan *Message
 	inMsgs   MChannel
 	server   *Server
-	handlers map[string]HandlerFunc
+	handlers []HandlerFunc
+	Handlers map[string]HandlerFunc
+	old      bool
 }
 
 func (s *Server) NewUser(nname, uname string) *User {
-	this := new(User)
-	this.Name = nname
-	this.Uname = uname
-	this.Rname = ""
-	this.inMsgs = make(chan *Message)
-	this.Msgs = this.inMsgs.Queue()
-	this.server = s
-	this.handlers = make(map[string]HandlerFunc)
-	s.Users[nname] = this
-	this.AddHandler("nicks", func(m *Message) {
+	u := &User{
+		Name:     nname,
+		Uname:    uname,
+		inMsgs:   make(chan *Message),
+		server:   s,
+		Handlers: make(map[string]HandlerFunc),
+	}
+
+	u.Msgs = u.inMsgs.Queue()
+
+	nicks := func(m *Message) {
 		if m.Type == NICK {
 		}
-	})
+	}
+	u.handlers = []HandlerFunc{nicks}
+
+	if u2, ok := s.Users[nname]; ok {
+		*u2 = *u
+	} else {
+		s.Users[nname] = u
+	}
+
 	go func() {
-		for m := range this.Msgs {
-			for _, f := range this.handlers {
+		for m := range u.Msgs {
+			for _, f := range u.handlers {
+				go f(m)
+			}
+			for _, f := range u.Handlers {
 				go f(m)
 			}
 		}
 	}()
-	return this
+	return u
 }
 
-func (this *User) AddHandler(name string, f HandlerFunc) string {
+func (u *User) addHandler(f HandlerFunc) {
+	u.handlers = append(u.handlers, f)
+}
+
+func (u *User) AddHandler(name string, f HandlerFunc) string {
 	if name == "" {
 		name = uuid.New()
 	}
-	this.handlers[name] = f
+	u.Handlers[name] = f
 	return name
 }
 
-func (this *User) RemHandler(name string) {
-	delete(this.handlers, name)
+func (u *User) RemHandler(name string) {
+	delete(u.Handlers, name)
 }
 
 func (this *User) Say(s string) {
@@ -70,4 +88,8 @@ func (this *User) Ident() string {
 		return ""
 	}
 	return this.Name
+}
+
+func (u *User) Old() bool {
+	return u.old
 }

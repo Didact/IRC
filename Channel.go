@@ -2,7 +2,7 @@ package irc
 
 import (
 	"code.google.com/p/go-uuid/uuid"
-	"my"
+	//"my"
 	"strings"
 )
 
@@ -14,9 +14,9 @@ type Channel struct {
 	users    map[string]*User
 	inMsgs   MChannel
 	Msgs     <-chan *Message
-	loaded   bool
 	handlers []HandlerFunc
 	Handlers map[string]HandlerFunc
+	old      bool
 }
 
 func (s *Server) NewChannel(name string) *Channel {
@@ -53,7 +53,6 @@ func (s *Server) NewChannel(name string) *Channel {
 				m2.Extra = []byte{1}
 				joins(m2)
 			}
-			c.loaded = true
 		}
 	}
 
@@ -70,7 +69,11 @@ func (s *Server) NewChannel(name string) *Channel {
 			}
 		}
 	}()
-	s.Channels[name] = c
+	if c2, ok := s.Channels[name]; ok {
+		*c2 = *c
+	} else {
+		s.Channels[name] = c
+	}
 	return c
 }
 
@@ -121,6 +124,9 @@ func (this *Channel) Ident() string {
 }
 
 func (c *Channel) Users() map[string]*User {
-	my.Wait(&c.loaded)
 	return c.users
+}
+
+func (c *Channel) Old() bool {
+	return c.old
 }

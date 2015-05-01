@@ -50,6 +50,7 @@ type Target interface {
 	Say(string)
 	Ident() string //because Name is already used
 	fmt.Stringer
+	Old() bool
 }
 
 type Message struct {
@@ -98,7 +99,7 @@ func (s *Server) NewMessage(str string) *Message {
 			break
 		}
 		u, ok := s.Users[user[0]]
-		if !ok {
+		if !ok || u.old {
 			u = s.NewUser(user[0], user[1])
 		}
 		src = u
@@ -127,10 +128,8 @@ func (s *Server) NewMessage(str string) *Message {
 	switch {
 	case strings.HasPrefix(fields[2], "#"): //To a channel
 		c, ok := s.Channels[fields[2]]
-		if !ok {
+		if !ok || c.old {
 			c = s.NewChannel(fields[2])
-			//my.Wait(&c.loaded)
-			s.Channels[fields[2]] = c
 		}
 		dst = c
 	case user[0] == s.Prof.nname: //To you
@@ -197,7 +196,7 @@ func (m *Message) String() string {
 		m.Text)
 }
 
-func (m MsgType) String() string {
+/*func (m MsgType) String() string {
 	var s string
 	switch m {
 	case JOIN:
@@ -220,7 +219,7 @@ func (m MsgType) String() string {
 		s = "TOPIC"
 	}
 	return s
-}
+}*/
 
 type Stub struct {
 	name string
