@@ -3,6 +3,7 @@ package irc
 import (
 	"code.google.com/p/go-uuid/uuid"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ type Server struct {
 	Channels map[string]*Channel
 	Msgs     MChannel
 	inMsgs   MChannel //Used internally
+	readMsgs chan *Message
 	ip       string
 	conn     net.Conn
 	Prof     *Profile
@@ -28,6 +30,12 @@ type Server struct {
 	Handlers map[string]HandlerFunc
 	c        <-chan time.Time
 	old      bool
+	All      io.Reader
+}
+
+type all struct {
+	s *Server
+	c chan *Message
 }
 
 func NewServer(name, ip string, prof *Profile) *Server {
@@ -37,6 +45,7 @@ func NewServer(name, ip string, prof *Profile) *Server {
 		Channels: make(map[string]*Channel),
 		Handlers: make(map[string]HandlerFunc),
 		inMsgs:   make(chan *Message),
+		readMsgs: make(chan *Message),
 		ip:       ip,
 		conn:     nil,
 		Prof:     prof,
@@ -45,6 +54,7 @@ func NewServer(name, ip string, prof *Profile) *Server {
 
 	s.Msgs = s.inMsgs.Queue()
 	s.Me = s.NewUser("~me", "~me")
+	s.All = &all{s, make(chan *Message)}
 	s.handlers = s.defaultHandlers()
 	return s
 }
@@ -166,6 +176,14 @@ func (s *Server) Join(chans ...string) []*Channel {
 	return channels
 }
 
+func (s *Server) Read(p []byte) (int, error) {
+	return copy(p, []byte((<-s.readMsgs).String())), nil
+}
+
+func (a *all) Read(p []byte) (int, error) {
+	return copy(p, []byte((<-a.c).String())), nil
+}
+
 func (s *Server) Write(p []byte) (int, error) {
 	if len(p) > 510 {
 		p = p[:511]
@@ -222,7 +240,13 @@ func (s *Server) defaultHandlers() []HandlerFunc {
 			delete(s.Users, m.Source.Ident())
 		}
 	}
-	return []HandlerFunc{pings, chans, server, users, nicks, quits}
+	reads := func(m *Message) {
+		s.readMsgs <- m
+	}
+	allReads := func(m *Message) {
+		s.All.(*all).c <- m
+	}
+	return []HandlerFunc{pings, chans, server, users, nicks, quits, reads, allReads}
 }
 
 func (s *Server) addHandler(f HandlerFunc) {

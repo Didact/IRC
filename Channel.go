@@ -12,6 +12,7 @@ type Channel struct {
 	Topic    string
 	Modes    []byte
 	users    map[string]*User
+	readMsgs chan *Message
 	inMsgs   MChannel
 	Msgs     <-chan *Message
 	handlers []HandlerFunc
@@ -26,6 +27,7 @@ func (s *Server) NewChannel(name string) *Channel {
 		Modes:    []byte{},
 		users:    make(map[string]*User),
 		inMsgs:   MChannel(make(chan *Message)),
+		readMsgs: make(chan *Message),
 		Handlers: make(map[string]HandlerFunc),
 	}
 
@@ -55,8 +57,11 @@ func (s *Server) NewChannel(name string) *Channel {
 			}
 		}
 	}
+	reads := func(m *Message) {
+		c.readMsgs <- m
+	}
 
-	c.handlers = []HandlerFunc{joins, parts, topics, rpl_namereplies}
+	c.handlers = []HandlerFunc{joins, parts, topics, rpl_namereplies, reads}
 	c.Msgs = c.inMsgs.Queue()
 
 	go func() {
@@ -106,7 +111,7 @@ func (this *Channel) Write(p []byte) (int, error) {
 }
 
 func (c *Channel) Read(p []byte) (int, error) {
-	return copy(p, []byte((<-c.Msgs).String())), nil
+	return copy(p, []byte((<-c.readMsgs).String())), nil
 }
 
 func (this *Channel) String() string {

@@ -8,8 +8,9 @@ type User struct {
 	Name     string
 	Uname    string
 	Rname    string
-	Msgs     <-chan *Message
 	inMsgs   MChannel
+	Msgs     <-chan *Message
+	readMsgs chan *Message
 	server   *Server
 	handlers []HandlerFunc
 	Handlers map[string]HandlerFunc
@@ -21,6 +22,7 @@ func (s *Server) NewUser(nname, uname string) *User {
 		Name:     nname,
 		Uname:    uname,
 		inMsgs:   make(chan *Message),
+		readMsgs: make(chan *Message),
 		server:   s,
 		Handlers: make(map[string]HandlerFunc),
 	}
@@ -31,7 +33,10 @@ func (s *Server) NewUser(nname, uname string) *User {
 		if m.Type == NICK {
 		}
 	}
-	u.handlers = []HandlerFunc{nicks}
+	reads := func(m *Message) {
+		u.readMsgs <- m
+	}
+	u.handlers = []HandlerFunc{nicks, reads}
 
 	if u2, ok := s.Users[nname]; ok {
 		*u2 = *u
@@ -70,6 +75,10 @@ func (u *User) RemHandler(name string) {
 
 func (this *User) Say(s string) {
 	this.server.PrivMsg(this, s)
+}
+
+func (u *User) Read(p []byte) (int, error) {
+	return copy(p, []byte((<-u.readMsgs).String())), nil
 }
 
 func (this *User) Write(p []byte) (int, error) {
