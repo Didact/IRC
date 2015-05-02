@@ -32,6 +32,7 @@ const (
 
 var Types = map[string]MsgType{
 	"PRIVMSG": PRIVMSG,
+	"PONG":    PONG,
 	"NOTICE":  NOTICE,
 	"NICK":    NICK,
 	"JOIN":    JOIN,
@@ -73,8 +74,8 @@ func (s *Server) NewMessage(str string) *Message {
 	this.Raw = str
 	this.Extra = []byte{0}
 	fields := strings.SplitN(str, " ", 5)
-	for i, str := range fields {
-		fields[i] = strings.TrimLeft(str, ":")
+	for i, str2 := range fields {
+		fields[i] = strings.TrimLeft(str2, ":")
 	}
 	if fields[0] == "PING" {
 		this.Type = PING

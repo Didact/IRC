@@ -68,12 +68,14 @@ func (s *Server) Start() {
 		<-time.After(5 * time.Second)
 		return
 	}
+	joined := make(chan byte)
 	go func() {
 		<-time.After(1 * time.Second)
 		s.Nick(s.Prof.nname)
 		s.User(s.Prof.uname, s.Prof.rname)
 		<-time.After(2 * time.Second)
 		s.Join(s.Prof.autos...)
+		joined <- 1
 	}()
 	go func() {
 		var i int
@@ -100,14 +102,27 @@ func (s *Server) Start() {
 			strs = strs[:len(strs)-1]
 			for _, str := range strs {
 				m := s.NewMessage(str)
-				if m != nil {
-					for _, f := range s.Handlers {
-						f(m)
-					}
+				if m == nil || m.Type == PONG {
+					continue
+				}
+				for _, f := range s.handlers {
+					f(m)
+				}
+				for _, f := range s.Handlers {
+					f(m)
+				}
+				select {
+				case s.readMsgs <- m:
+				default:
+				}
+				select {
+				case s.All.(*all).c <- m:
+				default:
 				}
 			}
 		}
 	}()
+	<-joined
 }
 
 func (s *Server) Restart() {
@@ -177,11 +192,15 @@ func (s *Server) Join(chans ...string) []*Channel {
 }
 
 func (s *Server) Read(p []byte) (int, error) {
-	return copy(p, []byte((<-s.readMsgs).String())), nil
+	return copy(p, []byte((<-s.readMsgs).String()+"\r\n")), nil
 }
 
 func (a *all) Read(p []byte) (int, error) {
-	return copy(p, []byte((<-a.c).String())), nil
+	m, ok := <-a.c
+	if !ok || m == nil {
+		return 0, io.EOF
+	}
+	return copy(p, []byte(m.String()+"\r\n")), nil
 }
 
 func (s *Server) Write(p []byte) (int, error) {
@@ -240,13 +259,7 @@ func (s *Server) defaultHandlers() []HandlerFunc {
 			delete(s.Users, m.Source.Ident())
 		}
 	}
-	reads := func(m *Message) {
-		s.readMsgs <- m
-	}
-	allReads := func(m *Message) {
-		s.All.(*all).c <- m
-	}
-	return []HandlerFunc{pings, chans, server, users, nicks, quits, reads, allReads}
+	return []HandlerFunc{pings, chans, server, users, nicks, quits}
 }
 
 func (s *Server) addHandler(f HandlerFunc) {

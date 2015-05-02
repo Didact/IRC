@@ -56,11 +56,8 @@ func (s *Server) NewChannel(name string) *Channel {
 			}
 		}
 	}
-	reads := func(m *Message) {
-		c.readMsgs <- m
-	}
 
-	c.handlers = []HandlerFunc{joins, parts, topics, rpl_namereplies, reads}
+	c.handlers = []HandlerFunc{joins, parts, topics, rpl_namereplies}
 	c.Msgs = c.inMsgs.Queue()
 
 	go func() {
@@ -70,6 +67,10 @@ func (s *Server) NewChannel(name string) *Channel {
 			}
 			for _, f := range c.Handlers {
 				f(m)
+			}
+			select {
+			case c.readMsgs <- m:
+			default:
 			}
 		}
 	}()
@@ -85,11 +86,11 @@ func (c *Channel) addHandler(f HandlerFunc) {
 	c.handlers = append(c.handlers, f)
 }
 
-func (this *Channel) AddHandler(name string, f HandlerFunc) string {
+func (c *Channel) AddHandler(name string, f HandlerFunc) string {
 	if name == "" {
 		name = uuid.New()
 	}
-	this.Handlers[name] = f
+	c.Handlers[name] = f
 	return name
 }
 
@@ -110,7 +111,7 @@ func (this *Channel) Write(p []byte) (int, error) {
 }
 
 func (c *Channel) Read(p []byte) (int, error) {
-	return copy(p, []byte((<-c.readMsgs).String())), nil
+	return copy(p, []byte((<-c.readMsgs).String()+"\r\n")), nil
 }
 
 func (this *Channel) String() string {

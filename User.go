@@ -33,10 +33,7 @@ func (s *Server) NewUser(nname, uname string) *User {
 		if m.Type == NICK {
 		}
 	}
-	reads := func(m *Message) {
-		u.readMsgs <- m
-	}
-	u.handlers = []HandlerFunc{nicks, reads}
+	u.handlers = []HandlerFunc{nicks}
 
 	if u2, ok := s.Users[nname]; ok {
 		*u2 = *u
@@ -47,10 +44,14 @@ func (s *Server) NewUser(nname, uname string) *User {
 	go func() {
 		for m := range u.Msgs {
 			for _, f := range u.handlers {
-				go f(m)
+				f(m)
 			}
 			for _, f := range u.Handlers {
-				go f(m)
+				f(m)
+			}
+			select {
+			case u.readMsgs <- m:
+			default:
 			}
 		}
 	}()
@@ -78,7 +79,7 @@ func (this *User) Say(s string) {
 }
 
 func (u *User) Read(p []byte) (int, error) {
-	return copy(p, []byte((<-u.readMsgs).String())), nil
+	return copy(p, []byte((<-u.readMsgs).String()+"\r\n")), nil
 }
 
 func (this *User) Write(p []byte) (int, error) {
