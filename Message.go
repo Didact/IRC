@@ -2,8 +2,8 @@ package irc
 
 import (
 	"fmt"
+	"github.com/Didact/my"
 	"io"
-	"my"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +25,7 @@ const (
 	MODE
 	PING
 	PONG
-	RPL_NOTOPIC MsgType = 332 + iota
+	RPL_NOTOPIC MsgType = 331 + iota
 	RPL_TOPIC
 	RPL_NAMREPLY MsgType = 353
 )
