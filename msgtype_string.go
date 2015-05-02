@@ -21,8 +21,8 @@ func (i MsgType) String() string {
 	case 1 <= i && i <= 11:
 		i -= 1
 		return _MsgType_name_0[_MsgType_index_0[i]:_MsgType_index_0[i+1]]
-	case 343 <= i && i <= 344:
-		i -= 343
+	case 331 <= i && i <= 332:
+		i -= 331
 		return _MsgType_name_1[_MsgType_index_1[i]:_MsgType_index_1[i+1]]
 	case i == 353:
 		return _MsgType_name_2

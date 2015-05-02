@@ -25,8 +25,8 @@ const (
 	MODE
 	PING
 	PONG
-	RPL_NOTOPIC MsgType = 331 + iota
-	RPL_TOPIC
+	RPL_NOTOPIC  MsgType = 331
+	RPL_TOPIC    MsgType = 332
 	RPL_NAMREPLY MsgType = 353
 )
 
