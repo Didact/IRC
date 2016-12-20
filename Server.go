@@ -1,14 +1,13 @@
 package irc
 
 import (
+	"code.google.com/p/go-uuid/uuid"
 	"fmt"
 	"io"
 	"net"
 	"strings"
 	"sync"
 	"time"
-
-	"code.google.com/p/go-uuid/uuid"
 )
 
 type HandlerFunc func(*Message)
@@ -32,8 +31,6 @@ type Server struct {
 	c        <-chan time.Time
 	old      bool
 	All      io.Reader
-	Out      MChannel
-	out      MChannel
 }
 
 type all struct {
@@ -49,7 +46,6 @@ func NewServer(name, ip string, prof *Profile) *Server {
 		Handlers: make(map[string]HandlerFunc),
 		inMsgs:   make(chan *Message),
 		readMsgs: make(chan *Message),
-		out:      make(chan *Message),
 		ip:       ip,
 		conn:     nil,
 		Prof:     prof,
@@ -57,7 +53,6 @@ func NewServer(name, ip string, prof *Profile) *Server {
 	}
 
 	s.Msgs = s.inMsgs.Queue()
-	s.Out = s.out.Queue()
 	s.Me = s.NewUser("~me", "~me")
 	s.All = &all{s, make(chan *Message)}
 	s.handlers = s.defaultHandlers()
@@ -66,42 +61,36 @@ func NewServer(name, ip string, prof *Profile) *Server {
 
 func (s *Server) Start() {
 	var err error
-	s.conn, err = net.DialTimeout("tcp", s.ip, 10*time.Second)
+	s.conn, err = net.Dial("tcp", s.ip)
 	if err != nil {
 		fmt.Println("***", err)
 		defer s.Restart()
 		<-time.After(5 * time.Second)
 		return
 	}
-	joined := make(chan struct{})
+	joined := make(chan byte)
 	go func() {
 		<-time.After(1 * time.Second)
 		s.Nick(s.Prof.nname)
 		s.User(s.Prof.uname, s.Prof.rname)
 		<-time.After(2 * time.Second)
 		s.Join(s.Prof.autos...)
-		joined <- struct{}{}
+		joined <- 1
 	}()
-	pingchan := make(chan int)
-	go func(c chan int) {
+	go func() {
 		var i int
 		for {
 			<-time.After(10 * time.Second)
-			c <- i
+			s.conn.Write([]byte(fmt.Sprintf("PING %d\r\n", i)))
 			i++
 			if i == 2000000000 {
 				i = 0
 			}
 		}
-	}(pingchan)
+	}()
 	buf := make([]byte, 512)
 	go func() {
 		for {
-			select {
-			case pingnum := <-pingchan:
-				s.Say(fmt.Sprintf("PING %d", pingnum))
-			default:
-			}
 			n, err := s.conn.Read(buf)
 			if err != nil {
 				fmt.Println("***", err)
@@ -120,20 +109,15 @@ func (s *Server) Start() {
 					f(m)
 				}
 				for _, f := range s.Handlers {
-					go f(m)
+					f(m)
 				}
-
-				// We really don't need to make pings visible to users
-				// At the least, this is mucking up my logs
-				if m.Type != PING {
-					select {
-					case s.readMsgs <- m:
-					default:
-					}
-					select {
-					case s.All.(*all).c <- m:
-					default:
-					}
+				select {
+				case s.readMsgs <- m:
+				default:
+				}
+				select {
+				case s.All.(*all).c <- m:
+				default:
 				}
 			}
 		}
@@ -142,7 +126,6 @@ func (s *Server) Start() {
 }
 
 func (s *Server) Restart() {
-	fmt.Println("***restarting")
 	s.old = true
 	defer func() { s.old = false }()
 	if s.conn != nil {
@@ -193,7 +176,6 @@ func (s *Server) Join(chans ...string) []*Channel {
 	}
 	channels := make([]*Channel, len(chans))
 	for _, str := range chans {
-		wg.Add(1)
 		s.Say("JOIN " + str)
 		c := s.NewChannel(str)
 		c.AddHandler("wait", func(m *Message) {
@@ -203,6 +185,7 @@ func (s *Server) Join(chans ...string) []*Channel {
 			}
 		})
 		channels = append(channels, c)
+		wg.Add(1)
 	}
 	wg.Wait()
 	return channels
@@ -225,7 +208,6 @@ func (s *Server) Write(p []byte) (int, error) {
 		p = p[:511]
 	}
 	<-s.c
-	s.out <- s.NewMessage(":~me!~me@me " + string(p))
 	return s.conn.Write(append(p, "\r\n"...))
 }
 
